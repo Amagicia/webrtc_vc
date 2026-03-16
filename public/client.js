@@ -1,7 +1,15 @@
 const socket = io()
-
-const localVideo = document.getElementById("local")
-const remoteVideo = document.getElementById("remote")
+// Camera started
+// New user joined
+// Offer sent
+// Offer received
+// Answer sent
+// Answer received
+// ICE candidate generated
+// Remote stream received
+// Connection state: connected
+const localVideo = document.getElementById("localVideo")
+const remoteVideo = document.getElementById("remoteVideo")
 
 let localStream
 let peers = {}
@@ -9,15 +17,25 @@ let peers = {}
 const config = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" }
+
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject"
+    },
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject"
+    }
   ]
 }
 
-async function startHost(){
+async function joinRoom(){
 
-  const room = document.getElementById("room").value
+  const roomId = document.getElementById("room").value
 
-  console.log("HOST STARTING")
+  console.log("Joining room:", roomId)
 
   localStream = await navigator.mediaDevices.getUserMedia({
     video:true,
@@ -28,88 +46,34 @@ async function startHost(){
 
   localVideo.srcObject = localStream
 
-  socket.emit("host", room)
+  socket.emit("join-room", roomId)
 
 }
 
-async function joinViewer(){
+socket.on("user-joined", async userId => {
 
-  const room = document.getElementById("room").value
+  console.log("New user joined:", userId)
 
-  console.log("VIEWER joining room:", room)
-
-  socket.emit("join", room)
-
-}
-
-socket.on("viewer-joined", async viewerId => {
-
-  console.log("New viewer:", viewerId)
-
-  const pc = new RTCPeerConnection(config)
-
-  peers[viewerId] = pc
-
-  localStream.getTracks().forEach(track=>{
-    pc.addTrack(track, localStream)
-  })
-
-  pc.onicecandidate = e => {
-
-    if(e.candidate){
-
-      console.log("ICE candidate generated")
-
-      socket.emit("candidate",{
-        target: viewerId,
-        candidate: e.candidate
-      })
-
-    }
-
-  }
+  const pc = createPeer(userId)
 
   const offer = await pc.createOffer()
 
   await pc.setLocalDescription(offer)
 
-  console.log("Offer created")
-
-  socket.emit("offer",{
-    viewerId,
-    offer
+  socket.emit("offer", {
+    target:userId,
+    offer:offer
   })
+
+  console.log("Offer sent")
 
 })
 
 socket.on("offer", async data => {
 
-  console.log("Offer received from host")
+  console.log("Offer received")
 
-  const pc = new RTCPeerConnection(config)
-
-  peers[data.hostId] = pc
-
-  pc.ontrack = e => {
-
-    console.log("Remote stream received")
-
-    remoteVideo.srcObject = e.streams[0]
-
-  }
-
-  pc.onicecandidate = e => {
-
-    if(e.candidate){
-
-      socket.emit("candidate",{
-        target:data.hostId,
-        candidate:e.candidate
-      })
-
-    }
-
-  }
+  const pc = createPeer(data.from)
 
   await pc.setRemoteDescription(data.offer)
 
@@ -117,27 +81,69 @@ socket.on("offer", async data => {
 
   await pc.setLocalDescription(answer)
 
-  console.log("Answer created")
-
-  socket.emit("answer",{
-    hostId:data.hostId,
-    answer
+  socket.emit("answer", {
+    target:data.from,
+    answer:answer
   })
+
+  console.log("Answer sent")
 
 })
 
 socket.on("answer", async data => {
 
-  console.log("Answer received by host")
+  console.log("Answer received")
 
-  await peers[data.viewerId].setRemoteDescription(data.answer)
+  await peers[data.from].setRemoteDescription(data.answer)
 
 })
 
-socket.on("candidate", async data => {
+socket.on("ice-candidate", async data => {
 
   console.log("ICE candidate received")
 
-  await peers[data.from].addIceCandidate(data.candidate)
+  if(peers[data.from]){
+    await peers[data.from].addIceCandidate(data.candidate)
+  }
 
 })
+
+function createPeer(userId){
+
+  const pc = new RTCPeerConnection(config)
+
+  peers[userId] = pc
+
+  localStream.getTracks().forEach(track=>{
+    pc.addTrack(track, localStream)
+  })
+
+  pc.ontrack = event => {
+
+    console.log("Remote stream received")
+
+    remoteVideo.srcObject = event.streams[0]
+
+  }
+
+  pc.onicecandidate = event => {
+
+    if(event.candidate){
+
+      console.log("ICE candidate generated")
+
+      socket.emit("ice-candidate", {
+        target:userId,
+        candidate:event.candidate
+      })
+
+    }
+
+  }
+
+  pc.onconnectionstatechange = () => {
+    console.log("Connection state:", pc.connectionState)
+  }
+
+  return pc
+}

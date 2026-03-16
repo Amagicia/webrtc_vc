@@ -14,75 +14,48 @@ io.on("connection", socket => {
 
   console.log("Client connected:", socket.id)
 
-  socket.on("host", room => {
+  socket.on("join-room", roomId => {
 
-    console.log("HOST created room:", room)
+    console.log("Joining room:", roomId)
 
-    rooms[room] = {
-      host: socket.id,
-      viewers: []
-    }
+    if(!rooms[roomId]) rooms[roomId] = []
 
-  })
+    rooms[roomId].push(socket.id)
+    socket.join(roomId)
 
-  socket.on("join", room => {
-
-    console.log("Viewer joining:", room)
-
-    if (!rooms[room]) {
-      console.log("Room not found")
-      return
-    }
-
-    rooms[room].viewers.push(socket.id)
-
-    socket.join(room)
-
-    io.to(rooms[room].host).emit("viewer-joined", socket.id)
+    socket.to(roomId).emit("user-joined", socket.id)
 
   })
 
-  socket.on("offer", ({viewerId, offer}) => {
-
-    console.log("Offer sent to viewer:", viewerId)
-
-    io.to(viewerId).emit("offer", {
-      offer,
-      hostId: socket.id
+  socket.on("offer", data => {
+    io.to(data.target).emit("offer", {
+      offer:data.offer,
+      from:socket.id
     })
-
   })
 
-  socket.on("answer", ({hostId, answer}) => {
-
-    console.log("Answer sent to host")
-
-    io.to(hostId).emit("answer", {
-      answer,
-      viewerId: socket.id
+  socket.on("answer", data => {
+    io.to(data.target).emit("answer", {
+      answer:data.answer,
+      from:socket.id
     })
-
   })
 
-  socket.on("candidate", data => {
-
-    console.log("ICE candidate forwarded")
-
-    io.to(data.target).emit("candidate", {
-      candidate: data.candidate,
-      from: socket.id
+  socket.on("ice-candidate", data => {
+    io.to(data.target).emit("ice-candidate", {
+      candidate:data.candidate,
+      from:socket.id
     })
-
   })
 
   socket.on("disconnect", () => {
-
-    console.log("Client disconnected:", socket.id)
-
+    console.log("Disconnected:", socket.id)
   })
 
 })
 
-server.listen(3000, () =>
-  console.log("Server running on port 3000")
+const PORT = process.env.PORT || 3000
+
+server.listen(PORT, () =>
+  console.log("Server running on port", PORT)
 )

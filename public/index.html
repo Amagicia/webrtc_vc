@@ -1,19 +1,21 @@
 <!DOCTYPE html>
 <html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video Call</title>
+</head>
 
 <body>
 
-<h2>WebRTC Broadcast</h2>
+<h3>WebRTC Video Call</h3>
 
-<input id="room" placeholder="room id">
-
-<button onclick="startHost()">Start Host</button>
-<button onclick="joinViewer()">Join Viewer</button>
+<input id="room" placeholder="Room ID">
+<button onclick="joinRoom()">Join Room</button>
 
 <br><br>
 
-<video id="local" autoplay muted></video>
-<video id="remote" autoplay></video>
+<video id="localVideo" autoplay muted playsinline width="200"></video>
+<video id="remoteVideo" autoplay playsinline width="200"></video>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="client.js"></script>
