@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+
+<h2>WebRTC Broadcast</h2>
+
+<input id="room" placeholder="room id">
+
+<button onclick="startHost()">Start Host</button>
+<button onclick="joinViewer()">Join Viewer</button>
+
+<br><br>
+
+<video id="local" autoplay muted></video>
+<video id="remote" autoplay></video>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="client.js"></script>
+
+</body>
+</html>
