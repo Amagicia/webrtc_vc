@@ -1,24 +1,92 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Video Call</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Video Call</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: #0f172a;
+            color: white;
+            text-align: center;
+        }
+
+        /* room input */
+        #room {
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+        }
+
+        /* video container */
+        .video-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        /* video style */
+        video {
+            width: 45%;
+            max-width: 400px;
+            border-radius: 12px;
+            background: black;
+        }
+
+        /* local camera mirror */
+        #localVideo {
+            transform: scaleX(-1);
+        }
+
+        @media (max-width:700px) {
+            .video-container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            #localVideo {
+                transform: scaleX(-1);
+            }
+
+            video {
+                width: 90%;
+            }
+        }
+    </style>
+
 </head>
 
 <body>
 
-<h3>WebRTC Video Call</h3>
+    <h3>WebRTC Video Call</h3>
 
-<input id="room" placeholder="Room ID">
-<button onclick="joinRoom()">Join Room</button>
+    <input id="room" placeholder="Room ID">
+    <button onclick="joinRoom()">Join Room</button>
 
-<br><br>
+    <div class="video-container">
 
-<video id="localVideo" autoplay muted playsinline width="200"></video>
-<video id="remoteVideo" autoplay playsinline width="200"></video>
+        <video id="localVideo" autoplay muted playsinline></video>
 
-<script src="/socket.io/socket.io.js"></script>
-<script src="client.js"></script>
+        <video id="remoteVideo" autoplay playsinline></video>
+
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
 
 </body>
+
 </html>
