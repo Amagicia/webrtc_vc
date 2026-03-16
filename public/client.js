@@ -1,150 +1,119 @@
-/*********************************************************
- SIMPLE WEBRTC CLIENT
- Features:
- - Camera & microphone
- - Multi-peer connections
- - Offer / Answer signaling
- - ICE candidate exchange
- - Mute / Unmute
- - Screen share
- - End call
-**********************************************************/
+/***************************************************
+ SIMPLE MULTI-PEER WEBRTC CLIENT
+***************************************************/
 
-/**************** SOCKET CONNECTION ****************/
+/******** SOCKET CONNECTION ********/
 const socket = io();
-console.log("[INIT] Socket connected");
 
-/**************** VIDEO ELEMENTS ****************/
+/******** VIDEO ELEMENTS ********/
 const localVideo = document.getElementById("localVideo");
-const remoteVideo = document.getElementById("remoteVideo");
+const videos = document.getElementById("videos");
 
-/**************** GLOBAL STATE ****************/
-let localStream = null;
-let peers = {};
+/******** GLOBAL STATE ********/
+let localStream;
+let peers = {}; // store peer connections
 
-let audioTrack = null;
-let videoTrack = null;
+let audioTrack;
+let videoTrack;
 
 let isMuted = false;
 let isScreenSharing = false;
 
-/**************** STUN + TURN CONFIG ****************/
+/******** STUN SERVER ********/
 const config = {
-    iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-
-        {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
-
-        {
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        }
-    ]
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
 
-
-/*********************************************************
+/***************************************************
  JOIN ROOM
-**********************************************************/
+***************************************************/
 async function joinRoom() {
-
     const roomId = document.getElementById("room").value;
 
     if (!roomId) {
-        console.log("[ERROR] Room ID required");
+        console.log("Room ID required");
         return;
     }
 
-    try {
+    /******** START CAMERA ********/
+    localStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+    });
 
-        /******** START CAMERA ********/
-        localStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true
-        });
+    localVideo.srcObject = localStream;
 
-        localVideo.srcObject = localStream;
+    audioTrack = localStream.getAudioTracks()[0];
+    videoTrack = localStream.getVideoTracks()[0];
 
-        audioTrack = localStream.getAudioTracks()[0];
-        videoTrack = localStream.getVideoTracks()[0];
+    console.log("Camera started");
 
-        console.log("[MEDIA] Camera started");
-
-        /******** JOIN ROOM ********/
-        socket.emit("join-room", roomId);
-
-        console.log("[ROOM] Joined:", roomId);
-
-    } catch (err) {
-
-        console.log("[ERROR] Media access failed:", err);
-
-    }
+    /******** JOIN ROOM ********/
+    socket.emit("join-room", roomId);
 }
 
-
-/*********************************************************
+/***************************************************
  CREATE PEER CONNECTION
-**********************************************************/
+***************************************************/
 function createPeer(userId) {
-
-    console.log("[PEER] Creating connection:", userId);
-
     const pc = new RTCPeerConnection(config);
+
     peers[userId] = pc;
 
     /******** SEND LOCAL TRACKS ********/
-    localStream.getTracks().forEach(track => {
+    localStream.getTracks().forEach((track) => {
         pc.addTrack(track, localStream);
     });
 
     /******** RECEIVE REMOTE STREAM ********/
+
     pc.ontrack = (event) => {
-        console.log("[MEDIA] Remote stream received");
-        remoteVideo.srcObject = event.streams[0];
-    };
-
-    /******** ICE CANDIDATES ********/
-    pc.onicecandidate = (event) => {
-
-        if (event.candidate) {
-
-            socket.emit("ice-candidate", {
-                target: userId,
-                candidate: event.candidate
-            });
-
-            console.log("[ICE] Candidate sent");
+        if (event.track.kind === "video") {
+            addRemoteVideo(event.streams[0], userId);
         }
     };
-
-    /******** DEBUG STATES ********/
-    pc.onconnectionstatechange = () => {
-        console.log("[STATE]", pc.connectionState);
-    };
-
-    pc.oniceconnectionstatechange = () => {
-        console.log("[ICE STATE]", pc.iceConnectionState);
-    };
-
-    pc.onsignalingstatechange = () => {
-        console.log("[SIGNAL STATE]", pc.signalingState);
+    /******** ICE CANDIDATE ********/
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            socket.emit("ice-candidate", {
+                target: userId,
+                candidate: event.candidate,
+            });
+        }
     };
 
     return pc;
 }
 
+/***************************************************
+ ADD REMOTE VIDEO
+***************************************************/
+function addRemoteVideo(stream, id) {
+    // prevent duplicate videos
+    if (document.getElementById("video-" + id)) return;
 
-/*********************************************************
- USER JOINED ROOM
-**********************************************************/
+    const wrapper = document.createElement("div");
+    wrapper.className = "video-wrapper";
+    wrapper.id = "video-" + id;
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.autoplay = true;
+    video.playsInline = true;
+
+    const label = document.createElement("div");
+    label.className = "video-label";
+    label.innerText = id;
+
+    wrapper.appendChild(video);
+    wrapper.appendChild(label);
+
+    videos.appendChild(wrapper);
+}
+/***************************************************
+ USER JOINED
+***************************************************/
 socket.on("user-joined", async (userId) => {
-
     const pc = createPeer(userId);
 
     const offer = await pc.createOffer();
@@ -152,19 +121,14 @@ socket.on("user-joined", async (userId) => {
 
     socket.emit("offer", {
         target: userId,
-        offer: offer
+        offer: offer,
     });
-
-    console.log("[WEBRTC] Offer sent");
-
 });
 
-
-/*********************************************************
+/***************************************************
  RECEIVE OFFER
-**********************************************************/
+***************************************************/
 socket.on("offer", async (data) => {
-
     const pc = createPeer(data.from);
 
     await pc.setRemoteDescription(data.offer);
@@ -174,151 +138,111 @@ socket.on("offer", async (data) => {
 
     socket.emit("answer", {
         target: data.from,
-        answer: answer
+        answer: answer,
     });
-
-    console.log("[WEBRTC] Answer sent");
-
 });
 
-
-/*********************************************************
+/***************************************************
  RECEIVE ANSWER
-**********************************************************/
+***************************************************/
 socket.on("answer", async (data) => {
-
     const pc = peers[data.from];
 
     if (!pc) return;
 
     await pc.setRemoteDescription(data.answer);
-
-    console.log("[WEBRTC] Remote description updated");
-
 });
 
-
-/*********************************************************
- RECEIVE ICE CANDIDATE
-**********************************************************/
+/***************************************************
+ RECEIVE ICE
+***************************************************/
 socket.on("ice-candidate", async (data) => {
-
     const pc = peers[data.from];
 
     if (!pc) return;
 
     await pc.addIceCandidate(data.candidate);
-
-    console.log("[ICE] Candidate added");
-
 });
 
+/***************************************************
+ USER LEFT
+***************************************************/
+socket.on("user-left", (id) => {
+    if (peers[id]) {
+        peers[id].close();
+        delete peers[id];
+    }
 
-/*********************************************************
+    const video = document.getElementById("video-" + id);
+
+    if (video) video.remove();
+});
+
+/***************************************************
  MUTE / UNMUTE
-**********************************************************/
+***************************************************/
 function toggleMute() {
-
-    if (!audioTrack) return;
-
     isMuted = !isMuted;
 
     audioTrack.enabled = !isMuted;
 
-    console.log(isMuted ? "[AUDIO] Muted" : "[AUDIO] Unmuted");
-
+    console.log(isMuted ? "Muted" : "Unmuted");
 }
 
-
-/*********************************************************
+/***************************************************
  SCREEN SHARE
-**********************************************************/
+***************************************************/
 async function toggleScreenShare() {
-
     if (!isScreenSharing) {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+        });
 
-        try {
+        const screenTrack = screenStream.getVideoTracks()[0];
 
-            const screenStream =
-                await navigator.mediaDevices.getDisplayMedia({
-                    video: true
-                });
+        replaceTrack(screenTrack);
 
-            const screenTrack =
-                screenStream.getVideoTracks()[0];
+        screenTrack.onended = stopScreenShare;
 
-            replaceVideoTrack(screenTrack);
-
-            screenTrack.onended = stopScreenShare;
-
-            isScreenSharing = true;
-
-            console.log("[SCREEN] Sharing started");
-
-        } catch (err) {
-
-            console.log("[ERROR] Screen share failed");
-
-        }
-
+        isScreenSharing = true;
     } else {
-
         stopScreenShare();
-
     }
 }
-
 
 function stopScreenShare() {
-
-    replaceVideoTrack(videoTrack);
+    replaceTrack(videoTrack);
 
     isScreenSharing = false;
-
-    console.log("[SCREEN] Sharing stopped");
-
 }
 
-
-function replaceVideoTrack(newTrack) {
-
-    for (const id in peers) {
-
+function replaceTrack(newTrack) {
+    for (let id in peers) {
         const sender = peers[id]
             .getSenders()
-            .find(s => s.track?.kind === "video");
+            .find((s) => s.track.kind === "video");
 
-        if (sender) sender.replaceTrack(newTrack);
+        sender.replaceTrack(newTrack);
     }
 
-    localVideo.srcObject =
-        new MediaStream([newTrack, audioTrack]);
-
+    localVideo.srcObject = new MediaStream([newTrack, audioTrack]);
 }
 
-
-/*********************************************************
+/***************************************************
  END CALL
-**********************************************************/
+***************************************************/
 function endCall() {
-
-    console.log("[CALL] Ending call");
-
     if (localStream) {
-
-        localStream.getTracks().forEach(track => track.stop());
-
+        localStream.getTracks().forEach((track) => track.stop());
     }
 
-    for (const id in peers) {
-
+    for (let id in peers) {
         peers[id].close();
-
     }
 
     peers = {};
 
-    localVideo.srcObject = null;
-    remoteVideo.srcObject = null;
+    videos.innerHTML = "";
 
+    localVideo.srcObject = null;
 }
